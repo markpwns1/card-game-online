@@ -18,8 +18,10 @@ let onOtherDisconnected = () => {
     document.dispatchEvent(otherDisconnectedEvent);
 };
 
-let onDataReceived = () => {
-
+let onDataReceived = data => {
+    if(data.type == GameNetwork.EVENT_GAME_DATA) {
+        Game.netReceive(data.data);
+    }
 };
 
 let onRoomCreated = () => {
@@ -61,6 +63,7 @@ GameNetwork = {
     EVENT_JOIN_SUCCESS: 1,
     EVENT_JOIN_FAIL: 2,
     EVENT_DISCONNECT: 3,
+    EVENT_GAME_DATA: 4,
 
     roomName: null,
     isConnected: false,
@@ -133,7 +136,7 @@ GameNetwork = {
                         onJoinFailed(data);                        
                     }
                     else {
-                        onReceiveEvent(data);
+                        onDataReceived(data);
                     }
                 });
 

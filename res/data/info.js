@@ -1,3 +1,4 @@
 const GAME_INFO = {
-    name: "Board Game Template"
+    name: "Board Game Template",
+    networkTickrate: 10
 };

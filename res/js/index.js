@@ -20,6 +20,7 @@ $(document).ready(() => {
     });
 
     roomCreateBtn.click(() => {
+        $("#waiting-for-player").show();
         $("#join-menu").hide();
 
         let name = words({
@@ -58,4 +59,16 @@ $(document).on("gamebegin", () => {
     $("#game").show();
 
     Game.init();
+});
+
+$(document).on("otherdisconnected", () => {
+    $("#join-failed-reason").text("The other player disconnected");
+
+    $("#joining-room").hide();
+    $("#waiting-for-player").hide();
+    $("#game").hide();
+
+    $(".join-menu-container").show();
+    $("#join-menu").show();
+    $("#join-failed-alert").show();
 });

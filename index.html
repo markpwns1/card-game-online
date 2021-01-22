@@ -11,10 +11,12 @@
         <script src="https://unpkg.com/peerjs@1.3.1/dist/peerjs.min.js"></script>
         <script src="res/data/info.js"></script>
         <script src="res/js/util.js"></script>
+        <script src="res/js/graphics.js"></script>
         <script src="res/js/random-words.js"></script>
         <script src="res/js/network.js"></script>
         <script src="res/js/player.js"></script>
         <script src="res/js/game.js"></script>
+        <script src="res/js/gamelogic.js"></script>
         <script src="res/js/index.js"></script>
     </head>
     <body>
@@ -27,7 +29,7 @@
                         <input id="room-name-textbox" type="text">
                         <input id="room-join-btn" type="button" value="Join Room">
                         <div id="join-failed-alert" class="error-box" hidden>
-                            Failed to join room: <span id="join-failed-reason">unknown error</span>
+                            <span id="join-failed-reason">unknown error</span>
                         </div>
                         <hr>
                         <span class="info">Don't have a room?</span>
