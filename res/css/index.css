@@ -53,6 +53,12 @@
     border: 1px solid black;
 }
 
+.room-link {
+    margin-top: 10px;
+    color: gray;
+    font-size: 12px;
+}
+
 /* #room-join-btn, #room-create-btn {
     width: 50%;
 } */

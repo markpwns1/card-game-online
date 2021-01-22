@@ -31,12 +31,24 @@ $(document).ready(() => {
         // GameNetwork.createRoom("abc");
         GameNetwork.createRoom(name);
     });
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const toJoin = urlParams.get('join');
+
+    if(toJoin) {
+        $("#join-menu").hide();
+        $("#joining-room").show();
+
+        GameNetwork.joinRoom(toJoin);
+    }
 });
 
 $(document).on("joinsuccess", () => {
     if(GameNetwork.isHost && !GameNetwork.isOtherConnected) {
         $("#waiting-for-player").show();
         $(".room-name").text(GameNetwork.roomName);
+        $(".room-link").text(window.location.protocol + '//' + window.location.host + window.location.pathname + 
+            "?join=" + GameNetwork.roomName);
     }
 });
 
