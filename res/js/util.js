@@ -15,3 +15,12 @@ Util.getMousePos = (canvas, e) => {
         y: e.clientY - rect.top
     };
 };
+
+Util.pointInRect = (p, r) => 
+    p.x > r.x 
+    && p.x < r.x + r.width 
+    && p.y > r.y 
+    && p.y < r.y + r.height;
+
+Util.dist = (a, b) => 
+    Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));

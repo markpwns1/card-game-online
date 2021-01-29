@@ -3,6 +3,9 @@ let roomJoinBtn;
 let roomCreateBtn;
 
 $(document).ready(() => {
+    
+    $("canvas").bind('contextmenu', () => false); 
+
     roomNameTextbox = $("#room-name-textbox");
     roomJoinBtn = $("#room-join-btn");
     roomCreateBtn = $("#room-create-btn");
