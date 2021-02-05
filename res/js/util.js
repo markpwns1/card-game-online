@@ -24,3 +24,24 @@ Util.pointInRect = (p, r) =>
 
 Util.dist = (a, b) => 
     Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
+
+const CARD_UNITS = [ "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3", "2", "A" ];
+Util.getStackNames = (type) => CARD_UNITS.map(x => "card" + type + x);
+
+Util.CARDS_CLUBS = Util.getStackNames("Clubs");
+Util.CARDS_DIAMONDS = Util.getStackNames("Diamonds");
+Util.CARDS_HEARTS = Util.getStackNames("Hearts");
+Util.CARDS_SPADES = Util.getStackNames("Spades");
+Util.CARD_JOKER = "cardJoker";
+
+// https://stackoverflow.com/questions/6274339/how-can-i-shuffle-an-array
+Util.shuffle = (a) => {
+   var j, x, i;
+   for (i = a.length - 1; i > 0; i--) {
+       j = Math.floor(Math.random() * (i + 1));
+       x = a[i];
+       a[i] = a[j];
+       a[j] = x;
+   }
+   return a;
+}
