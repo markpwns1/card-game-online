@@ -10,7 +10,7 @@ const HAND_CLOSED_SPRITE = "hand_closed.png";
 const CARD_SHADOW_SPRITE = "shadow.png";
 
 const MESSAGE_DURATION = 3.0;
-
+const EMPTY_CLOSURE = () => { };
 // const sprites = { };
 
 let selfMousePos;
@@ -32,19 +32,58 @@ const contextMenuReverse = (stack) => {
     stack.updateCards(stack.cards.reverse());
 }
 
+const contextMenuFlip = (stack) => {
+    stack.setFaceDown(!stack.isFaceDown);
+}
+
 const cards = [
     "rh1", "rh2", "rh3"
 ];
 
 let stacks = [ ];
+let effectAreas = [ ];
 
 let stackIDCounter = 0;
 
-let eventMessages = [
-    { text: "Other player shuffled that stack! 3", timeLeft: 3.0 },
-    { text: "Other player shuffled that stack! 2", timeLeft: 2.0 },
-    { text: "Other player shuffled that stack! 1", timeLeft: 1.0 },
-];
+let eventMessages = [ ];
+
+class EffectArea {
+    label = "Effect Zone";
+    colour = "rgb(0, 100, 0)";
+    pos = { x: 0, y: 0 };
+    size = { width: 100, height: 100 };
+    cardsContained = [ ];
+    onStackEnter = EMPTY_CLOSURE;
+    onStackExit = EMPTY_CLOSURE;
+
+    constructor(label, x, y, width, height) {
+        this.label = label;
+        this.pos = { x: x, y: y };
+        this.size = { width: width, height: height };
+    }
+
+    getRect() {
+        return { ...this.pos, ...this.size };
+    }
+
+    draw(g) {
+        g.fillStyle = "black";
+        g.beginPath();
+        g.rect(this.pos.x, this.pos.y, this.size.width, this.size.height);
+        g.stroke();
+
+        g.fillStyle = this.colour;
+        g.fillRect(this.pos.x, this.pos.y, this.size.width, this.size.height);
+
+        g.fillStyle = "black";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.fillText(this.label, this.pos.x + this.size.width / 2, this.pos.y + this.size.height / 2);
+        // console.log("!");
+    }
+
+    update(dt) { }
+}
 
 class Stack {
     id = -1;
@@ -52,6 +91,7 @@ class Stack {
     pos = { x: 0, y: 0 };
     size = { x: CARD_WIDTH, y: CARD_HEIGHT };
     isFaceDown = false;
+    isHidden = false;
     cardVerticality = 5;
 
     dragOffset = { x: 0, y: 0 };
@@ -64,6 +104,7 @@ class Stack {
     contextMenuItems = [
         { text: "Shuffle", message: "The other player shuffled that stack", action: contextMenuShuffle },
         { text: "Reverse", message: "The other player reversed that stack", action: contextMenuReverse },
+        { text: "Flip", message: "The other player has flipped that stack", action: contextMenuFlip }
     ];
 
     constructor(cards, pos, faceDown = false) {
@@ -114,7 +155,7 @@ class Stack {
 
         for (let i = 0; i < this.cards.length; i++) {
             const card = this.cards[i];
-            const sprite = Sprites.get(this.isFaceDown? CARD_BACK_SPRITE : (card + ".png"));
+            const sprite = Sprites.get((this.isFaceDown || this.isHidden)? CARD_BACK_SPRITE : (card + ".png"));
             // if(!sprite) {
             //     console.log(card);
             //     return;
@@ -153,6 +194,18 @@ class Stack {
                 contextMenuClosed: this.id
             };
         }
+    }
+
+    setFaceDown(f, foreign = false) {
+        this.isFaceDown = f
+        if(!foreign)
+            toSend = { 
+                ...toSend,
+                setFaceDown: {
+                    id: this.id,
+                    isFaceDown: f
+                }
+            };
     }
 
     drawContextMenu(g) {
@@ -268,6 +321,17 @@ class Stack {
                 }
             };
         }
+
+        for (const effectArea of effectAreas) {
+            if(Util.intersectsAABB(this.getRect(), effectArea.getRect())) {
+                effectArea.cardsContained.push(this);
+                effectArea.onStackEnter(this);
+            }
+            else if(effectArea.cardsContained.find(x => x.id == this.id)) {
+                effectArea.cardsContained = effectArea.cardsContained.filter(x => x.id != this.id);
+                effectArea.onStackExit(this);
+            }
+        }
     }
 }
 
@@ -281,10 +345,11 @@ let onMouseDown = e => {
     if(e.button == 0 || e.button == 1)
         toSend = { mouseDown: true };
 
+    let shouldBreak = false;
     for (const stack of stacks) {
+        
         if(stack.contextMenuOtherOpen || stack.isOtherDragging) continue;
         
-        let shouldBreak = false;
         if(stack.contextMenuSelfOpen) {
             for (let i = 0; i < stack.contextMenuItems.length; i++) {
                 const item = stack.contextMenuItems[i];
@@ -306,31 +371,35 @@ let onMouseDown = e => {
                 }
             }
         }
-        
+
         if(stack.contextMenuSelfOpen)
             stack.closeContextMenu();
 
         if(shouldBreak) break;
+    }
 
-        if(!Util.pointInRect(selfMousePos, stack.getRect())) continue;
+    if(!shouldBreak) {
+        for (const stack of stacks) {
+            if(!Util.pointInRect(selfMousePos, stack.getRect())) continue;
 
-        // if(!stack.isOtherDragging && e.button == 2) {
-        //     stack.isFaceDown = !stack.isFaceDown;
-        // } 
-        // else 
-        if(e.button == 0 || (e.button == 1 && stack.cards.length == 1)) {
-            stack.beginDrag();
-            break;
-        }
-        else if(e.button == 1 && Util.pointInRect(selfMousePos, stack.getTopCardRect())) {
-            const card = stack.cards.pop();
-            stack.updateCards(stack.cards);
-            // const newStack = new Stack(card, { ...stack.pos }, stack.isFaceDown);
-            // stacks.push(newStack);
-            const newStack = instantiateStack([ card ], { ...stack.getTopCardRect() })
-            // stack.endDrag();
-            newStack.beginDrag();
-            break;
+            // if(!stack.isOtherDragging && e.button == 2) {
+            //     stack.isFaceDown = !stack.isFaceDown;
+            // } 
+            // else 
+            if(e.button == 0 || (e.button == 1 && stack.cards.length == 1)) {
+                stack.beginDrag();
+                break;
+            }
+            else if(e.button == 1 && Util.pointInRect(selfMousePos, stack.getTopCardRect())) {
+                const card = stack.cards.pop();
+                stack.updateCards(stack.cards);
+                // const newStack = new Stack(card, { ...stack.pos }, stack.isFaceDown);
+                // stacks.push(newStack);
+                const newStack = instantiateStack([ card ], { ...stack.getTopCardRect() }, stack.isFaceDown);
+                // stack.endDrag();
+                newStack.beginDrag();
+                break;
+            }
         }
     }
 
@@ -343,8 +412,8 @@ let onMouseUp = e => {
     if(e.button == 0 || e.button == 1)
         toSend = { mouseDown: false };
 
-    for (let i = stacks.length - 1; i >= 0; i--) {
-        const stack = stacks[i];
+    for (const stack of stacks) {
+        // const stack = stacks[i];
 
         if(stack.isSelfDragging && (e.button == 0 || (e.button == 1 && stack.cards.length == 1))) {
             
@@ -356,12 +425,14 @@ let onMouseUp = e => {
                 if(Util.dist(stack.pos, otherStack.getTopCardRect()) < 50) {
                     otherStack.updateCards(otherStack.cards.concat(stack.cards));
                     destroyStack(stack.id);
-                    // stacks = stacks.filter(x => x.id != stack.id);
+                    i = 0;
+                    break;
                 }
             }
         }
         else if(e.button == 2 && !stack.isOtherDragging && !stack.contextMenuOtherOpen && Util.pointInRect(selfMousePos, stack.getRect())) {
             stack.openContextMenu(selfMousePos);
+            break;
         }
 
     }
@@ -416,10 +487,29 @@ Game.onInit = canvas => {
     // s = new Stack(Hearts, { x: 10, y: 10} );
     // stacks.push(s);
 
-    instantiateStack(Util.CARDS_CLUBS, { x: 10, y: 10 }, false, true);
-    instantiateStack(Util.CARDS_DIAMONDS, { x: 10 + (10 + CARD_WIDTH) * 1, y: 10 }, false, true);
-    instantiateStack(Util.CARDS_HEARTS, { x: 10 + (10 + CARD_WIDTH) * 2, y: 10 }, false, true);
-    instantiateStack(Util.CARDS_SPADES, { x: 10 + (10 + CARD_WIDTH) * 3, y: 10 }, false, true);
+    instantiateStack(Util.CARDS_CLUBS, { x: 10, y: 150 }, false, true);
+    instantiateStack(Util.CARDS_DIAMONDS, { x: 10 + (10 + CARD_WIDTH) * 1, y: 150 }, false, true);
+    instantiateStack(Util.CARDS_HEARTS, { x: 10 + (10 + CARD_WIDTH) * 2, y: 150 }, false, true);
+    instantiateStack(Util.CARDS_SPADES, { x: 10 + (10 + CARD_WIDTH) * 3, y: 150 }, false, true);
+
+    const selfHand = new EffectArea(GameNetwork.isHost? "Your hand" : "The other player's hand", 10, 10, Game.WIDTH - 20, 100);
+    
+    const reveal = (stack) => { stack.isHidden = false; };
+    const createEnterFunc = (self) => (stack) => {
+        if(self != GameNetwork.isHost) {
+            stack.isHidden = true;
+        }
+    };
+
+    selfHand.onStackEnter = createEnterFunc(true);
+    selfHand.onStackExit = reveal;
+
+    const otherHand = new EffectArea(GameNetwork.isHost? "The other player's hand" : "Your hand", 10, Game.HEIGHT - 110, Game.WIDTH - 20, 100);
+    otherHand.onStackEnter = createEnterFunc(false);
+    otherHand.onStackExit = reveal;
+
+    effectAreas.push(selfHand);
+    effectAreas.push(otherHand);
 }
 
 Game.tick = (dt, g) => {
@@ -430,6 +520,11 @@ Game.tick = (dt, g) => {
             otherMousePosSmooth = otherMousePos;
 
         otherMousePosSmooth = Util.vecLerp(otherMousePosSmooth, otherMousePos, 5.0 * dt);
+    }
+
+    for (const effectArea of effectAreas) {
+        effectArea.update(dt);
+        effectArea.draw(g);
     }
 
     for (let i = stacks.length - 1; i >= 0; i--) {
@@ -499,8 +594,8 @@ Game.netReceive = data => {
     if(data.endedDrag) {
         const found = stacks.find(x => x.id == data.endedDrag.id);
         if(found) {
-            found.endDrag(true);
             found.pos = data.endedDrag.finalPos;
+            found.endDrag(true);
         }
     }
 
@@ -518,6 +613,10 @@ Game.netReceive = data => {
         eventMessages.unshift({ text: data.eventMessage, timeLeft: MESSAGE_DURATION });
     }
 
+    if(data.setFaceDown) {
+        const found = stacks.find(x => x.id == data.setFaceDown.id);
+        if(found) found.setFaceDown(data.setFaceDown.isFaceDown);
+    }
 }
 
 Game.netTick = dt => {
