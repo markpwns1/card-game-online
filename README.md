@@ -184,3 +184,27 @@ The game engine, essentially. Your game-specific code hooks into events generate
 - `otherMousePosSmooth: Point` - The other client's interpolated mouse position, based on his last known mouse position. 
 - `canvasEvent: (eventName: string, callback: EventListener)` - Shortcut for `Game.canvas.addEventListener(eventName, callback, false);`
 - `send: (data: any) => void` - Sends JSON to the other client. The other client will then receive it in his `Game.netReceive`.
+
+### Util
+Util is a mish-mash of useful functions and variables that I needed.
+- `lerp: (a: number, b: number, t: number) => number` - Linearly interpolates between numbers a and b with a delta of t
+- `vecLerp: (a: Vector, b: Vector, t: number) => Vector` - Linearly interpolates between vectors a and b with a delta of t
+- `browserToCanvasCoords: (canvas: HTMLCanvasElement, evt: Event) => Point` - Given a canvas and the `clientX` and `clientY` from an `Event`, it returns a the proper coordinate on the canvas. This is for converting browser coordinates to canvas coordinates for events like mouse clicks or mobile taps.
+- `pointInRect: (p: Point, r: Rect) => boolean` - Returns whether or not point `p` is inside rectangle `r`.
+- `dist: (a: Point, b: Point) => number` - Returns the distance between points `a` and `b`.
+- `shuffle: (a: T[]) => T[]` - Shuffles an array in place and returns it. Note that this mutates the array.
+- `intersectsAABB: (a: Rect, b: Rect) => boolean` - Returns true if rectangle `a` intersects with rectangle `b`.
+- `emptyClosure: () => void` - Does literally nothing. Use it for when things require a callback but you don't need one.
+
+## Graphics
+Pretty empty, honestly.
+- `clear: (g, colour: string)` - Clears the canvas a certain colour.
+
+
+
+
+
+
+
+
+
