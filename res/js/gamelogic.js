@@ -1,626 +1,309 @@
-const CONTEXT_MENU_WIDTH = 150;
-const CONTEXT_MENU_ITEM_HEIGHT = 25;
 
-const CARD_WIDTH = 88;
-const CARD_HEIGHT = 120;
+const LEFT_MOUSE_BUTTON = 0;
+const MIDDLE_MOUSE_BUTTON = 1;
+const RIGHT_MOUSE_BUTTON = 2;
 
-const CARD_BACK_SPRITE = "cardBack_red4.png";
 const HAND_OPEN_SPRITE = "hand_open.png";
 const HAND_CLOSED_SPRITE = "hand_closed.png";
-const CARD_SHADOW_SPRITE = "shadow.png";
 
-const MESSAGE_DURATION = 3.0;
-const EMPTY_CLOSURE = () => { };
-// const sprites = { };
+// Sample context menu item to move a stack to the center of the board
+CardStacks.defaultContextMenuItems.push({
+    text: "Move to Center",
+    message: "The other player has moved that stack to the center",
+    action: stack => {
+        stack.setPos({ 
+            x: GAME_INFO.gameWidth / 2 - stack.size.x / 2, 
+            y: GAME_INFO.gameHeight / 2 - stack.size.y / 2 
+        });
+    }
+});
 
-let selfMousePos;
-
-let otherMousePos;
-let otherMousePosSmooth;
 let otherMouseDown = false;
 
-let leftMouseDown = false;
-let middleMouseDown = false;
-let rightMouseDown = false;
-
-const contextMenuShuffle = (stack) => {
-    Util.shuffle(stack.cards);
-    stack.updateCards(stack.cards);
-}
-
-const contextMenuReverse = (stack) => {
-    stack.updateCards(stack.cards.reverse());
-}
-
-const contextMenuFlip = (stack) => {
-    stack.setFaceDown(!stack.isFaceDown);
-}
-
-const cards = [
-    "rh1", "rh2", "rh3"
-];
-
-let stacks = [ ];
-let effectAreas = [ ];
-
-let stackIDCounter = 0;
-
-let eventMessages = [ ];
-
-class EffectArea {
-    label = "Effect Zone";
-    colour = "rgb(0, 100, 0)";
-    pos = { x: 0, y: 0 };
-    size = { width: 100, height: 100 };
-    cardsContained = [ ];
-    onStackEnter = EMPTY_CLOSURE;
-    onStackExit = EMPTY_CLOSURE;
-
-    constructor(label, x, y, width, height) {
-        this.label = label;
-        this.pos = { x: x, y: y };
-        this.size = { width: width, height: height };
-    }
-
-    getRect() {
-        return { ...this.pos, ...this.size };
-    }
-
-    draw(g) {
-        g.fillStyle = "black";
-        g.beginPath();
-        g.rect(this.pos.x, this.pos.y, this.size.width, this.size.height);
-        g.stroke();
-
-        g.fillStyle = this.colour;
-        g.fillRect(this.pos.x, this.pos.y, this.size.width, this.size.height);
-
-        g.fillStyle = "black";
-        g.textAlign = "center";
-        g.textBaseline = "middle";
-        g.fillText(this.label, this.pos.x + this.size.width / 2, this.pos.y + this.size.height / 2);
-        // console.log("!");
-    }
-
-    update(dt) { }
-}
-
-class Stack {
-    id = -1;
-    cards = [ ];
-    pos = { x: 0, y: 0 };
-    size = { x: CARD_WIDTH, y: CARD_HEIGHT };
-    isFaceDown = false;
-    isHidden = false;
-    cardVerticality = 5;
-
-    dragOffset = { x: 0, y: 0 };
-    isSelfDragging = false;
-    isOtherDragging = false;
-
-    contextMenuOtherOpen = false;
-    contextMenuSelfOpen = false;
-    contextMenuPos = { x: 0, y: 0 };
-    contextMenuItems = [
-        { text: "Shuffle", message: "The other player shuffled that stack", action: contextMenuShuffle },
-        { text: "Reverse", message: "The other player reversed that stack", action: contextMenuReverse },
-        { text: "Flip", message: "The other player has flipped that stack", action: contextMenuFlip }
-    ];
-
-    constructor(cards, pos, faceDown = false) {
-        this.cards = [ ...cards ];
-        this.pos = pos;
-        this.isFaceDown = faceDown;
-        this.id = ++stackIDCounter;
-    }
-
-    getTop() {
-        return this.cards[this.cards.length - 1];
-    }
-
-    getRect() {
-        return {
-            x: this.pos.x, 
-            y: this.pos.y, 
-            width: this.size.x, 
-            height: this.size.y + (this.cards.length - 1) * this.cardVerticality 
-        };
-    }
-
-    getTopCardRect() {
-        return  { 
-            x: this.pos.x, 
-            y: this.pos.y + (this.cards.length - 1) * this.cardVerticality, 
-            width: this.size.x, 
-            height: this.size.y 
-        };
-    }
-
-    update(dt) {
-        if(this.isSelfDragging) {
-            this.pos = { x: selfMousePos.x + this.dragOffset.x, y: selfMousePos.y + this.dragOffset.y };
-        }
-        else if(this.isOtherDragging) {
-            this.pos = { 
-                x: otherMousePosSmooth.x + this.dragOffset.x, 
-                y: otherMousePosSmooth.y + this.dragOffset.y 
-            };
-        }
-    }
-
-    draw(g) {
-        if(this.isSelfDragging || this.isOtherDragging) {
-            g.drawImage(Sprites.get(CARD_SHADOW_SPRITE), this.pos.x + 10, this.pos.y + 10, this.size.x, this.size.y + (this.cards.length - 1) * this.cardVerticality);
-        }
-
-        for (let i = 0; i < this.cards.length; i++) {
-            const card = this.cards[i];
-            const sprite = Sprites.get((this.isFaceDown || this.isHidden)? CARD_BACK_SPRITE : (card + ".png"));
-            // if(!sprite) {
-            //     console.log(card);
-            //     return;
-            // }
-            // console.log(sprite);
-            g.drawImage(sprite, this.pos.x, this.pos.y + i * this.cardVerticality, this.size.x, this.size.y);
-        }
-    }
-
-    openContextMenu(position, foreign = false) {
-        this.contextMenuPos = { ...position };
-
-        if(foreign) {
-            this.contextMenuOtherOpen = true;
-        }
-        else {
-            this.contextMenuSelfOpen = true;
-            toSend = {
-                ...toSend,
-                contextMenuOpened: {
-                    id: this.id,
-                    pos: position
-                }
-            };
-        }
-    }
-
-    closeContextMenu(foreign = false) {
-        if(foreign) {
-            this.contextMenuOtherOpen = false;
-        }
-        else {
-            this.contextMenuSelfOpen = false;
-            toSend = {
-                ...toSend,
-                contextMenuClosed: this.id
-            };
-        }
-    }
-
-    setFaceDown(f, foreign = false) {
-        this.isFaceDown = f
-        if(!foreign)
-            toSend = { 
-                ...toSend,
-                setFaceDown: {
-                    id: this.id,
-                    isFaceDown: f
-                }
-            };
-    }
-
-    drawContextMenu(g) {
-        if(!this.contextMenuSelfOpen && !this.contextMenuOtherOpen) return;
-
-        const size = this.contextMenuOtherOpen? CONTEXT_MENU_ITEM_HEIGHT : (CONTEXT_MENU_ITEM_HEIGHT * Math.max(1, this.contextMenuItems.length));
-
-        g.fillStyle = "black";
-        g.beginPath();
-        g.rect(this.contextMenuPos.x, this.contextMenuPos.y, CONTEXT_MENU_WIDTH, size);
-        g.stroke();
-
-        g.fillStyle = "rgb(200, 200, 200)";
-        g.fillRect(this.contextMenuPos.x, this.contextMenuPos.y, CONTEXT_MENU_WIDTH, size);
-            
-        g.textAlign = "left";
-
-        if(this.contextMenuSelfOpen) {
-            if(this.contextMenuItems.length <= 0) {
-                g.font = "12px Arial";
-                g.fillText("(None)", this.contextMenuPos.x + 5, this.contextMenuPos.y + CONTEXT_MENU_ITEM_HEIGHT / 2); 
-                return;
-            }
-
-            for (let i = 0; i < this.contextMenuItems.length; i++) {
-                const item = this.contextMenuItems[i];
-                const y = this.contextMenuPos.y + CONTEXT_MENU_ITEM_HEIGHT * i;
-
-                const rect = { 
-                    x: this.contextMenuPos.x, 
-                    y: y, 
-                    width: CONTEXT_MENU_WIDTH, 
-                    height: CONTEXT_MENU_ITEM_HEIGHT
-                };
-
-                g.textBaseline = "middle"; 
-                if(Util.pointInRect(selfMousePos, rect)) {
-                    g.fillStyle = "gray";
-                    g.fillRect(rect.x, rect.y, rect.width, rect.height);
-                    g.fillStyle = "white";
-                }
-                else {
-                    g.fillStyle = "black";
-                }
-
-                g.font = "12px Arial";
-                g.fillText(item.text, this.contextMenuPos.x + 5, y + CONTEXT_MENU_ITEM_HEIGHT / 2); 
-            }
-        }
-        else if(this.contextMenuOtherOpen) {
-            g.textBaseline = "middle"; 
-            g.fillStyle = "black";
-            g.font = "12px Arial";
-            g.fillText("(Opponent is interacting)", this.contextMenuPos.x + 5, this.contextMenuPos.y + CONTEXT_MENU_ITEM_HEIGHT / 2); 
-        }
-    }
-
-    updateCards(cards, foreign = false) {
-        this.cards = cards;
-        if(!foreign)
-            toSend = {
-                ...toSend,
-                updateStackCards: {
-                    id: this.id,
-                    cards: cards
-                }
-            };
-    }
-
-    beginDrag(foreign = false) {
-        this.pos = { x: this.pos.x - 10, y: this.pos.y - 10 };
-
-        if(foreign) {
-            this.isOtherDragging = true;
-
-            this.dragOffset = { 
-                x: this.pos.x - otherMousePosSmooth.x, 
-                y: this.pos.y - otherMousePosSmooth.y 
-            };
-        }    
-        else {
-            this.isSelfDragging = true;
-
-            this.dragOffset = { 
-                x: this.pos.x - selfMousePos.x, 
-                y: this.pos.y - selfMousePos.y 
-            };
-
-            toSend = { 
-                ...toSend, 
-                begunDrag: this.id
-            };
-        }
-    }
-
-    endDrag(foreign = false) {
-        stacks = stacks.filter(x => x.id != this.id);
-        stacks.unshift(this);
-        if(foreign) {
-            this.isOtherDragging = false;
-        }
-        else {
-            this.isSelfDragging = false;
-            this.pos = { x: this.pos.x + 10, y: this.pos.y + 10 };
-            // this.pos.x = Math.floor(this.pos.x / (10 + CARD_WIDTH)) * (10 + CARD_WIDTH) + 10;
-            // this.pos.y = Math.floor(this.pos.y / (10 + CARD_HEIGHT)) * (10 + CARD_HEIGHT) + 10;
-
-            toSend = { 
-                ...toSend, 
-                endedDrag: {
-                    id: this.id,
-                    finalPos: this.pos
-                }
-            };
-        }
-
-        for (const effectArea of effectAreas) {
-            if(Util.intersectsAABB(this.getRect(), effectArea.getRect())) {
-                effectArea.cardsContained.push(this);
-                effectArea.onStackEnter(this);
-            }
-            else if(effectArea.cardsContained.find(x => x.id == this.id)) {
-                effectArea.cardsContained = effectArea.cardsContained.filter(x => x.id != this.id);
-                effectArea.onStackExit(this);
-            }
-        }
-    }
-}
-
-let s;
-
-let toSend = { };
-
 let onMouseDown = e => {
-    toSend = { };
 
-    if(e.button == 0 || e.button == 1)
-        toSend = { mouseDown: true };
+    Game.selfMousePos = Util.browserToCanvasCoords(Game.canvas, e);
 
-    let shouldBreak = false;
-    for (const stack of stacks) {
-        
-        if(stack.contextMenuOtherOpen || stack.isOtherDragging) continue;
-        
-        if(stack.contextMenuSelfOpen) {
-            for (let i = 0; i < stack.contextMenuItems.length; i++) {
-                const item = stack.contextMenuItems[i];
-                const y = stack.contextMenuPos.y + CONTEXT_MENU_ITEM_HEIGHT * i;
+    // Make sure the network buffer is empty before beginning the mousedown operation
+    // (this will save a lot of headaches in the future)
+    NetworkBuffer.assertEmpty();
+    NetworkBuffer.addOne("mousePos", {
+        pos: Game.selfMousePos,
+        immediate: true
+    });
 
-                const rect = { 
-                    x: stack.contextMenuPos.x, 
-                    y: y, 
-                    width: CONTEXT_MENU_WIDTH, 
-                    height: CONTEXT_MENU_ITEM_HEIGHT
-                };
+    // If the left or middle mouse buttons are down, send a message to the other client
+    // saying that it should display the "fist" sprite 
+    if(e.button == LEFT_MOUSE_BUTTON || e.button == MIDDLE_MOUSE_BUTTON)
+        NetworkBuffer.addOne("mouseDown", true);
 
-                if(Util.pointInRect(selfMousePos, rect)) {
-                    if(item.message)
-                        toSend = { ...toSend, eventMessage: item.message }
-                    item.action(stack);
-                    shouldBreak = true;
-                    break;
-                }
-            }
-        }
+    // Try to interact with any open context menus, and only allow card dragging
+    // if we didn't click on any context menu items
+    const canDrag = !CardStacks.interactWithContextMenus();
+    if(canDrag) {
 
-        if(stack.contextMenuSelfOpen)
-            stack.closeContextMenu();
+        // For each card stack...
+        for (const stack of CardStacks.active) {
 
-        if(shouldBreak) break;
-    }
+            // If the mouse isn't over the card stack or if this stack is being
+            // used by the other player, continue
+            if(!stack.isHovering() || stack.isOccupiedByOtherPlayer()) continue;
 
-    if(!shouldBreak) {
-        for (const stack of stacks) {
-            if(!Util.pointInRect(selfMousePos, stack.getRect())) continue;
-
-            // if(!stack.isOtherDragging && e.button == 2) {
-            //     stack.isFaceDown = !stack.isFaceDown;
-            // } 
-            // else 
-            if(e.button == 0 || (e.button == 1 && stack.cards.length == 1)) {
+            // Otherwise, if the stack is being left clicked (or middle-clicked but it's only 1 card)...
+            if(e.button == LEFT_MOUSE_BUTTON || (e.button == MIDDLE_MOUSE_BUTTON && stack.cards.length == 1)) {
+                // Begin dragging this stack
                 stack.beginDrag();
                 break;
             }
-            else if(e.button == 1 && Util.pointInRect(selfMousePos, stack.getTopCardRect())) {
-                const card = stack.cards.pop();
-                stack.updateCards(stack.cards);
-                // const newStack = new Stack(card, { ...stack.pos }, stack.isFaceDown);
-                // stacks.push(newStack);
-                const newStack = instantiateStack([ card ], { ...stack.getTopCardRect() }, stack.isFaceDown);
-                // stack.endDrag();
+
+            // Otherwise if the stack is being middle clicked and the mouse is over the 
+            // top-most card...
+            else if(e.button == MIDDLE_MOUSE_BUTTON && stack.isHoveringTopmostCard()) {
+                // Take the topmost card from the stack and begin dragging it
+                const newStack = stack.separate(1);
                 newStack.beginDrag();
                 break;
             }
         }
     }
 
-    Game.send(toSend);
+    // Having completed the mousedown operation, send everything to the other client
+    NetworkBuffer.send();
 };
 
 let onMouseUp = e => {
-    toSend = { };
+    // Make sure the network buffer is empty before beginning the mousedown operation
+    NetworkBuffer.assertEmpty();
 
-    if(e.button == 0 || e.button == 1)
-        toSend = { mouseDown: false };
+    // If the left or middle mouse buttons have been released, send a message to the 
+    // other client saying that it should display the "hand spead out" sprite 
+    if(e.button == LEFT_MOUSE_BUTTON || e.button == MIDDLE_MOUSE_BUTTON)
+        NetworkBuffer.addOne("mouseDown", false);
 
-    for (const stack of stacks) {
-        // const stack = stacks[i];
-
-        if(stack.isSelfDragging && (e.button == 0 || (e.button == 1 && stack.cards.length == 1))) {
+    // For each card stack...
+    for (const stack of CardStacks.active) {
+        
+        // If the card stack is being dragged, and if the left mouse button is being
+        // released (or the middle mouse button if the stack is just one card)...
+        if(stack.isSelfDragging && (e.button == LEFT_MOUSE_BUTTON || (e.button == MIDDLE_MOUSE_BUTTON && stack.cards.length == 1))) {
             
+            // Stop dragging the stack
             stack.endDrag();
 
-            for (const otherStack of stacks) {
+            // For every *other* stack of cards...
+            for (const otherStack of CardStacks.active) {
                 if(stack == otherStack) continue;
 
+                // If the stack that was being dragged is close enough to this
+                // stack, combine the stacks together
                 if(Util.dist(stack.pos, otherStack.getTopCardRect()) < 50) {
-                    otherStack.updateCards(otherStack.cards.concat(stack.cards));
-                    destroyStack(stack.id);
-                    i = 0;
+                    otherStack.combine(stack);
                     break;
                 }
             }
         }
-        else if(e.button == 2 && !stack.isOtherDragging && !stack.contextMenuOtherOpen && Util.pointInRect(selfMousePos, stack.getRect())) {
-            stack.openContextMenu(selfMousePos);
+
+        // Otherwise if the right mouse button is the one that's being released,
+        // and the mouse is currently over this stack, and this stack isn't being
+        // used by the other player in any way, open the stack's context menu
+        else if(e.button == RIGHT_MOUSE_BUTTON && !stack.isOccupiedByOtherPlayer() && stack.isHovering()) {
+            stack.openContextMenu(Game.selfMousePos);
             break;
         }
 
     }
 
-    Game.send(toSend);
+    // Having completed the mousedown operation, send everything to the other client
+    NetworkBuffer.send();
 }
 
-let instantiateStack = (cards, pos, faceDown = false, foreign = false) => {
-    const s = new Stack(cards, pos, faceDown);
-    stacks.push(s);
+let onKeyUp = e => {
+    // If the R key has been released (after being pressed)...
+    if(e.code == "KeyR" && GameNetwork.isHost) { 
+        if(window.confirm("You are about to reset the game. Are you sure?")) {
+            // Tell the other client to reset their game
+            Game.send({
+                resetGame: true
+            });
 
-    if(!foreign)
-        toSend = { 
-            ...toSend, 
-            cardInstantiated: {
-                cards: cards,
-                pos: pos,
-                faceDown: faceDown
-            }
-        };
-
-    return s;
+            // And reset our own game
+            Notifications.send("Game reset.");
+            Game.reset(); 
+        }
+    }
 }
 
-let destroyStack = (id, foreign = false) => {
-    stacks = stacks.filter(x => x.id != id);
-    if(!foreign)
-        toSend = {
-            ...toSend,
-            stackDestroyed: id
-        };
-}
+// Since there are infinite possibilities of how to go about controlling a game
+// on mobile (tap, double tap, tap and hold, tap with multiple fingers, etc.), I 
+// will make no assumptions and have only written the bare minimum as a template, 
+// (dragging cards around on mobile) and leave it up to the programmer.
+// See onMouseDown and onMouseUp above for a straightforward example on how to
+// manipulate stacks in response to input events.
 
-Game.onInit = canvas => {
+let onTouchStart = e => { 
+    // Prevent default mobile events
+    e.preventDefault();
+    e.stopImmediatePropagation();
 
-    // sprites.handOpen = Sprites.get("hand_open.png");
-    // sprites.handClosed = Sprites.get("hand_closed.png");
+    // Assume that the "mouse position" is the first touch point
+    let touchPoint = Util.browserToCanvasCoords(Game.canvas, e.touches[0]);
+    Game.selfMousePos = touchPoint;
 
-    // sprites.card_back = Sprites.get("cardBack_red4.png");
-    // sprites.shadow = Sprites.get("shadow.png");
-
-    // sprites.
-
-    Game.canvasEvent("mousemove", e => {
-        selfMousePos = Util.getMousePos(canvas, e);
+    // Send our mouse position to the other client before dragging
+    NetworkBuffer.assertEmpty();
+    NetworkBuffer.addOne("mousePos", {
+        pos: Game.selfMousePos,
+        immediate: true
     });
 
-    Game.canvasEvent("mousedown", onMouseDown);
+    // For each stack...
+    for (const stack of CardStacks.active) {
+        // If the mouse isn't over the card stack, continue
+        if(!stack.isHovering() || stack.isOccupiedByOtherPlayer()) continue;
 
-    Game.canvasEvent("mouseup", onMouseUp);
+        // If we're actually dragging, notify the other client that he should display the
+        // "hand in a fist" sprite
+        NetworkBuffer.addOne("mouseDown", true);
 
-    // s = new Stack(Hearts, { x: 10, y: 10} );
-    // stacks.push(s);
+        // Begin dragging
+        stack.beginDrag();
+        break;
+    }
 
-    instantiateStack(Util.CARDS_CLUBS, { x: 10, y: 150 }, false, true);
-    instantiateStack(Util.CARDS_DIAMONDS, { x: 10 + (10 + CARD_WIDTH) * 1, y: 150 }, false, true);
-    instantiateStack(Util.CARDS_HEARTS, { x: 10 + (10 + CARD_WIDTH) * 2, y: 150 }, false, true);
-    instantiateStack(Util.CARDS_SPADES, { x: 10 + (10 + CARD_WIDTH) * 3, y: 150 }, false, true);
+    // Send all the network data to the other client
+    NetworkBuffer.send();
+};
 
-    const selfHand = new EffectArea(GameNetwork.isHost? "Your hand" : "The other player's hand", 10, 10, Game.WIDTH - 20, 100);
+let onTouchEnd = e => { 
+    // Prevent default mobile events
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    // Make sure the network buffer is empty
+    NetworkBuffer.assertEmpty();
+
+    // Stop dragging any dragged stacks
+    for (const stack of CardStacks.active) {
+        if(stack.isSelfDragging)
+            stack.endDrag();
+    }
     
-    const reveal = (stack) => { stack.isHidden = false; };
-    const createEnterFunc = (self) => (stack) => {
-        if(self != GameNetwork.isHost) {
-            stack.isHidden = true;
-        }
-    };
+    // Tell the other client to use the "hand spread out" sprite
+    NetworkBuffer.addOne("mouseDown", false);
 
-    selfHand.onStackEnter = createEnterFunc(true);
-    selfHand.onStackExit = reveal;
+    // Send all that info to the other client
+    NetworkBuffer.send();
+};
 
-    const otherHand = new EffectArea(GameNetwork.isHost? "The other player's hand" : "Your hand", 10, Game.HEIGHT - 110, Game.WIDTH - 20, 100);
-    otherHand.onStackEnter = createEnterFunc(false);
-    otherHand.onStackExit = reveal;
+let onTouchMove = e => {
+    // Prevent default mobile events
+    e.preventDefault();
+    e.stopImmediatePropagation();
 
-    effectAreas.push(selfHand);
-    effectAreas.push(otherHand);
+    // Update our "mouse position" in response to any touches
+    Game.selfMousePos = Util.browserToCanvasCoords(Game.canvas, e.touches[0]);
 }
 
+// Called exactly once before the game starts. Is only ever called once, ever.
+Game.onInit = () => {
+
+    // Subscribe to some canvas events. These are regular old canvas events 
+    // that anyone can look up on W3Schools or Mozilla web docs
+    Game.canvasEvent("mousedown", onMouseDown);
+    Game.canvasEvent("mouseup", onMouseUp);
+    Game.canvasEvent("touchstart", onTouchStart);
+    Game.canvasEvent("touchmove", onTouchMove);
+    Game.canvasEvent("touchend", onTouchEnd);
+
+    // Listen for keypresses
+    window.addEventListener('keyup', onKeyUp, false);
+
+    // Create 2 effect areas, one for the host's hand and one for the guest's hand.
+    // We'll make it so that cards inside the zone will only be visible to the zone's
+    // owner.
+    const hostHand = new EffectArea(GameNetwork.isHost? "Your hand" : "The other player's hand", 10, 10, Game.WIDTH - 20, 100);
+    const guestHand = new EffectArea(GameNetwork.isHost? "The other player's hand" : "Your hand", 10, Game.HEIGHT - 110, Game.WIDTH - 20, 100);
+    
+    // If this client isn't the host, then hide cards that go here
+    hostHand.onStackEnter = stack => {
+        if(!GameNetwork.isHost) stack.isHidden = true;
+    };
+
+    // If this client isn't the guest, then hide cards that go here
+    guestHand.onStackEnter = stack => {
+        if(GameNetwork.isHost) stack.isHidden = true;
+    };
+
+    // Removing a card from the zone will no longer make it hidden
+    const reveal = stack => { stack.isHidden = false; };
+    guestHand.onStackExit = reveal;
+    hostHand.onStackExit = reveal;
+
+    // Register these effect areas
+    EffectAreas.active.push(hostHand);
+    EffectAreas.active.push(guestHand);
+
+    // Arrange the board
+    Game.reset();
+}
+
+// Called automatically every time the game board needs to be reset (including
+// initial setup of the game board). Can also be called manually to reset
+// the game arbitrarily
+Game.reset = () => {
+    CardStacks.reset(); // Delete all card stacks, if there are any
+
+    // Place 4 stacks of cards side-by-side
+    CardStacks.instantiate(Util.CARDS_CLUBS, { x: 10, y: 150 }, false, true);
+    CardStacks.instantiate(Util.CARDS_DIAMONDS, { x: 10 + (10 + GAME_INFO.defaultCardWidth) * 1, y: 150 }, false, true);
+    CardStacks.instantiate(Util.CARDS_HEARTS, { x: 10 + (10 + GAME_INFO.defaultCardWidth) * 2, y: 150 }, false, true);
+    CardStacks.instantiate(Util.CARDS_SPADES, { x: 10 + (10 + GAME_INFO.defaultCardWidth) * 3, y: 150 }, false, true);
+}
+
+// Called automatically every frame
 Game.tick = (dt, g) => {
     Graphics.clear(g, "green");
 
-    if(otherMousePos) {
-        if(!otherMousePosSmooth)
-            otherMousePosSmooth = otherMousePos;
+    // Update and draw effect areas
+    EffectAreas.updateAll(dt);
+    EffectAreas.drawAll(g);
 
-        otherMousePosSmooth = Util.vecLerp(otherMousePosSmooth, otherMousePos, 5.0 * dt);
-    }
+    // Update and draw card stacks
+    CardStacks.updateAll(dt);
+    CardStacks.drawAll(g);
 
-    for (const effectArea of effectAreas) {
-        effectArea.update(dt);
-        effectArea.draw(g);
-    }
+    // Draw the other player's mouse cursor
+    let handSprite = Sprites.get(otherMouseDown? HAND_CLOSED_SPRITE : HAND_OPEN_SPRITE);
+    g.drawImage(handSprite, Game.otherMousePosSmooth.x - handSprite.width / 2, Game.otherMousePosSmooth.y - handSprite.height / 2, handSprite.width, handSprite.height);
 
-    for (let i = stacks.length - 1; i >= 0; i--) {
-        const stack = stacks[i];
-        stack.update(dt);
-        if(!stack.isSelfDragging && !stack.isOtherDragging)
-            stack.draw(g);
-    }
+    // Draw context menus
+    CardStacks.drawAllContextMenus(g);
 
-    const draggingStacks = stacks.filter(x => x.isSelfDragging || x.isOtherDragging);
-    for (const stack of draggingStacks) {
-        stack.draw(g);
-    }
-
-    if(otherMousePosSmooth) {
-        let handSprite = Sprites.get(otherMouseDown? HAND_CLOSED_SPRITE : HAND_OPEN_SPRITE);
-        g.drawImage(handSprite, otherMousePosSmooth.x - handSprite.width / 2, otherMousePosSmooth.y - handSprite.height / 2, handSprite.width, handSprite.height);
-    }
-
-    for (const stack of stacks) {
-        stack.drawContextMenu(g);
-    }
-
-    for (let i = 0; i < eventMessages.length; i++) {
-        const msg = eventMessages[i];
-        g.fillStyle = "rgba(255, 255, 0, " + (msg.timeLeft / MESSAGE_DURATION) + ")";
-        g.font = "14px Arial";
-        g.textAlign = "right";
-        g.textBaseline = "bottom";
-        g.fillText(msg.text, Game.WIDTH - 10, Game.HEIGHT - i * 20 - 10);
-        msg.timeLeft -= dt;
-        if(msg.timeLeft <= 0) {
-            eventMessages = eventMessages.filter(x => x.timeLeft > 0);
-        }
-    }
-    // s.update(dt);
-    // s.draw(g);
+    // Update and draw the messages at the bottom right
+    Notifications.tick(dt, g);
 }
 
+// Called automatically whenever data is received from the other player
 Game.netReceive = data => {
-    otherMousePos = data.mousePos || otherMousePos;
+
+    // These are all required for built-in things like syncing card stacks,
+    // effect areas, etc.
+    Game.receiveOtherMousePos(data); // Receive the other player's mouse position
+    Game.receiveResetEvent(data); // Receive the "reset game" event if it ever comes
+    CardStacks.receiveNetworkEvents(data); // Receive all the events related to card stacks
+    EffectAreas.receiveNetworkEvents(data); // Receive all the events related to effect areas
+    Notifications.receiveMessages(data); // Receive any event messages 
+
+    // Finally, some game-specific code which will update the other player's
+    // "mouse down status" if "mouseDown" happens to be included in the data
+    // we received
     otherMouseDown = data.mouseDown === undefined? otherMouseDown : data.mouseDown;
-
-    if(data.stackDestroyed) {
-        destroyStack(data.stackDestroyed, true);
-    }
-
-    if(data.updateStackCards) {
-        const found = stacks.find(x => x.id == data.updateStackCards.id);
-        if(found)
-            found.updateCards(data.updateStackCards.cards, true);
-    }
-
-    if(data.cardInstantiated) {
-        instantiateStack(
-            data.cardInstantiated.cards, 
-            data.cardInstantiated.pos, 
-            data.cardInstantiated.faceDown,
-            true);
-    }
-
-    if(data.begunDrag) {
-        const found = stacks.find(x => x.id == data.begunDrag);
-        if(found) found.beginDrag(true);
-    }
-    
-    if(data.endedDrag) {
-        const found = stacks.find(x => x.id == data.endedDrag.id);
-        if(found) {
-            found.pos = data.endedDrag.finalPos;
-            found.endDrag(true);
-        }
-    }
-
-    if(data.contextMenuOpened) {
-        const found = stacks.find(x => x.id == data.contextMenuOpened.id);
-        if(found) found.openContextMenu(data.contextMenuOpened.pos, true);
-    }
-
-    if(data.contextMenuClosed) {
-        const found = stacks.find(x => x.id == data.contextMenuClosed);
-        if(found) found.closeContextMenu(true);
-    }
-
-    if(data.eventMessage) {
-        eventMessages.unshift({ text: data.eventMessage, timeLeft: MESSAGE_DURATION });
-    }
-
-    if(data.setFaceDown) {
-        const found = stacks.find(x => x.id == data.setFaceDown.id);
-        if(found) found.setFaceDown(data.setFaceDown.isFaceDown);
-    }
 }
 
+// Called automatically at GAME_INFO.networkTickrate times per second,
+// the return value is what gets sent to the other player
 Game.netTick = dt => {
-    Game.send({
-        mousePos: selfMousePos
-    });
+    return {
+        // Return some arbitrary JSON
+    };
 }

@@ -9,6 +9,7 @@ const joinSuccessEvent = new CustomEvent("joinsuccess");
 var GameNetwork;
 
 let onOtherDisconnected = () => {
+    connection.close();
     peer.disconnect();
 
     GameNetwork.isConnected = false;
@@ -114,19 +115,34 @@ GameNetwork = {
     joinRoom: function(name) {
         peer = new Peer();
 
+        let joinTimeout;
+
         peer.on("error", e => {
             let reasons = {
-                "peer-unavailable": "Room does not exist"
+                "peer-unavailable": "Room does not exist",
+                "network": "Unknown network error"
             };
+
+            if(joinTimeout)
+                clearTimeout(joinTimeout);
+                
             onJoinFailed({
                 reason: reasons[e.type] || e.type
             });
         });
 
         peer.on("open", () => {
+            joinTimeout = setTimeout(() => {
+                onJoinFailed({
+                    reason: "Timed out"
+                });
+            }, 3000);
+
             connection = peer.connect(name);
             connection.on("open", () => {
                 connection.on("data", content => {
+                    clearTimeout(joinTimeout);
+
                     let data = JSON.parse(content);
                     if(data.type == this.EVENT_JOIN_SUCCESS) {
                         onJoinSuccess(name);

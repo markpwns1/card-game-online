@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
         <title>Board Game</title>
         <link href="res/css/global.css" rel="stylesheet">
         <link href="res/css/index.css" rel="stylesheet">
@@ -12,11 +13,15 @@
         <script src="res/data/info.js"></script>
         <script src="res/js/util.js"></script>
         <script src="res/js/graphics.js"></script>
-        <script src="res/js/sprite-manager.js"></script>
+        <script src="res/js/spritemanager.js"></script>
         <script src="res/js/random-words.js"></script>
         <script src="res/js/network.js"></script>
         <script src="res/js/player.js"></script>
         <script src="res/js/game.js"></script>
+        <script src="res/js/networkbuffer.js"></script>
+        <script src="res/js/eventmessage.js"></script>
+        <script src="res/js/stack.js"></script>
+        <script src="res/js/effectareas.js"></script>
         <script src="res/js/gamelogic.js"></script>
         <script src="res/js/index.js"></script>
     </head>
@@ -26,7 +31,7 @@
                 <div id="join-menu">
                     <h1 id="join-menu-title">Board Game</h1>
                     <div>
-                        <span class="info">Already have a room? Enter its name here:</span>
+                        <span class="info">Already have a room? Enter its name here:</span><br>
                         <input id="room-name-textbox" type="text">
                         <input id="room-join-btn" type="button" value="Join Room">
                         <div id="join-failed-alert" class="error-box" hidden>
@@ -53,6 +58,7 @@
             <canvas id="game-canvas" width=800 height=600>
 
             </canvas>
+            <button id="restart-button" hidden>Restart Game</button>
         </div>
     </body>
     <footer>
